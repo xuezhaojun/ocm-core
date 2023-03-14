@@ -1,0 +1,53 @@
+name: pre-check
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches:
+      - main
+      - release-*
+
+env:
+  GO_VERSION: '1.19'
+  GO_REQUIRED_MIN_VERSION: ''
+
+jobs:
+  e2e:
+    name: e2e-registration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Setup kind
+        uses: engineerd/setup-kind@v0.5.0
+        with:
+          version: v0.17.0
+      - name: Install imagebuilder
+        run: go install github.com/openshift/imagebuilder/cmd/imagebuilder@v1.2.3
+      - name: Build images
+        run: |
+          make -C ./staging/src/open-cluster-management.io/registration-operator images
+          make -C ./staging/src/open-cluster-management.io/placement images
+
+          # registration and work images
+          make images
+      - name: Load images
+        run: |
+          # Tag images build in ocm-core
+          docker tag quay.io/open-cluster-management/ocm:latest quay.io/open-cluster-management/registration:latest
+          docker tag quay.io/open-cluster-management/ocm:latest quay.io/open-cluster-management/work:latest
+
+          # Load images into kind
+          kind load docker-image --name=kind quay.io/open-cluster-management/registration-operator:latest
+          kind load docker-image --name=kind quay.io/open-cluster-management/registration:latest
+          kind load docker-image --name=kind quay.io/open-cluster-management/work:latest
+          kind load docker-image --name=kind quay.io/open-cluster-management/placement:latest
+      - name: Run e2e test registration
+        run: |
+          make -C ./staging/src/open-cluster-management.io/registration test-e2e
+        env:
+          KUBECONFIG: /home/runner/.kube/config
