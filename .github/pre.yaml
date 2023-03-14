@@ -49,5 +49,8 @@ jobs:
       - name: Run e2e test registration
         run: |
           make -C ./staging/src/open-cluster-management.io/registration test-e2e
+
+          # Run unified test cases.
+          make test-e2e
         env:
           KUBECONFIG: /home/runner/.kube/config
